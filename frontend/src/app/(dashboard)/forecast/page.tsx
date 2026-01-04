@@ -1,28 +1,37 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { useAuthStore } from '@/store/auth-store'
+import { supabase } from '@/lib/supabase'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { TrendingUp, AlertCircle } from 'lucide-react'
-import apiClient from '@/lib/api-client'
 import { Forecast } from '@/types'
 import { formatDate } from '@/lib/utils'
 
 export default function ForecastPage() {
+  const { user } = useAuthStore()
   const [forecasts, setForecasts] = useState<Forecast[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadForecasts()
-  }, [])
+    if (user) {
+      loadForecasts()
+    }
+  }, [user])
 
   const loadForecasts = async () => {
     try {
-      const response = await apiClient.get('/api/v1/forecasts')
-      setForecasts(response.data.forecasts || [])
+      const { data, error } = await supabase
+        .from('forecasts')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setForecasts(data as Forecast[])
     } catch (error) {
-      console.error('Failed to load forecasts:', error)
+      console.error('Error loading forecasts:', error)
     } finally {
       setLoading(false)
     }
@@ -38,6 +47,14 @@ export default function ForecastPage() {
     return variants[status] || 'default'
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-slate-600">Loading forecasts...</div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -45,9 +62,7 @@ export default function ForecastPage() {
         <p className="text-slate-600 mt-2">View and manage your market forecasts</p>
       </div>
 
-      {loading ? (
-        <div className="text-center py-12">Loading forecasts...</div>
-      ) : forecasts.length === 0 ? (
+      {forecasts.length === 0 ? (
         <Card>
           <CardContent className="text-center py-12">
             <TrendingUp className="h-12 w-12 text-slate-300 mx-auto mb-4" />
@@ -64,7 +79,7 @@ export default function ForecastPage() {
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle>Forecast Analysis</CardTitle>
-                    <CardDescription>Created {formatDate(forecast.created_at)}</CardDescription>
+                    <p className="text-sm text-slate-600 mt-1">Created {formatDate(forecast.created_at)}</p>
                   </div>
                   <Badge variant={getStatusBadge(forecast.status)}>
                     {forecast.status}

@@ -1,130 +1,183 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Package, TrendingUp, Target, Plus } from 'lucide-react'
-import apiClient from '@/lib/api-client'
+import { useAuthStore } from '@/store/auth-store'
+import { supabase } from '@/lib/supabase'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Package, TrendingUp, CreditCard, BarChart3 } from 'lucide-react'
+import { Product, Forecast } from '@/types'
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState({
-    productsCount: 0,
-    forecastsCount: 0,
-    creditsRemaining: 50,
-  })
+  const { user } = useAuthStore()
+  const [products, setProducts] = useState<Product[]>([])
+  const [forecasts, setForecasts] = useState<Forecast[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadStats()
-  }, [])
+    if (user) {
+      loadDashboardData()
+    }
+  }, [user])
 
-  const loadStats = async () => {
+  const loadDashboardData = async () => {
     try {
       const [productsRes, forecastsRes] = await Promise.all([
-        apiClient.get('/api/v1/products'),
-        apiClient.get('/api/v1/forecasts'),
+        supabase.from('products').select('*').eq('user_id', user?.id).limit(5),
+        supabase.from('forecasts').select('*').eq('user_id', user?.id).limit(5),
       ])
 
-      setStats({
-        productsCount: productsRes.data.total || 0,
-        forecastsCount: forecastsRes.data.total || 0,
-        creditsRemaining: 50,
-      })
+      if (productsRes.data) setProducts(productsRes.data as Product[])
+      if (forecastsRes.data) setForecasts(forecastsRes.data as Forecast[])
     } catch (error) {
-      console.error('Failed to load stats:', error)
+      console.error('Error loading dashboard:', error)
     } finally {
       setLoading(false)
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-slate-600">Loading...</div>
+      </div>
+    )
+  }
+
+  const completedForecasts = forecasts.filter(f => f.status === 'completed').length
+  const averageConfidence = forecasts.length > 0
+    ? Math.round(forecasts.reduce((sum, f) => sum + (f.confidence_level || 0), 0) / forecasts.length)
+    : 0
+
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-600 mt-2">Welcome back! Here&apos;s your overview.</p>
+        <h1 className="text-3xl font-bold text-slate-900">Welcome back, {user?.full_name}!</h1>
+        <p className="text-slate-600 mt-2">Here is your commerce intelligence overview</p>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Products</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">Total Products</CardTitle>
+            <Package className="h-4 w-4 text-slate-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.productsCount}</div>
-            <p className="text-xs text-muted-foreground">Active products in your catalog</p>
+            <div className="text-2xl font-bold">{products.length}</div>
+            <p className="text-xs text-slate-600 mt-1">Active in catalog</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Forecasts</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">Forecasts</CardTitle>
+            <TrendingUp className="h-4 w-4 text-slate-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.forecastsCount}</div>
-            <p className="text-xs text-muted-foreground">Market analyses completed</p>
+            <div className="text-2xl font-bold">{completedForecasts}</div>
+            <p className="text-xs text-slate-600 mt-1">Completed analyses</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Credits Remaining</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">Credits Remaining</CardTitle>
+            <CreditCard className="h-4 w-4 text-slate-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.creditsRemaining}</div>
-            <p className="text-xs text-muted-foreground">Forecasts available this month</p>
+            <div className="text-2xl font-bold">{user?.forecast_credits_remaining || 0}</div>
+            <p className="text-xs text-slate-600 mt-1">Forecast credits</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600">Avg Confidence</CardTitle>
+            <BarChart3 className="h-4 w-4 text-slate-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{averageConfidence}%</div>
+            <p className="text-xs text-slate-600 mt-1">Forecast accuracy</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Start analyzing your products</CardDescription>
+            <CardTitle>Recent Products</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <Link href="/products">
-              <Button className="w-full justify-start">
-                <Plus className="h-4 w-4 mr-2" />
-                Add New Product
-              </Button>
-            </Link>
-            <Link href="/forecast">
-              <Button variant="outline" className="w-full justify-start">
-                <TrendingUp className="h-4 w-4 mr-2" />
-                Create Forecast
-              </Button>
-            </Link>
+          <CardContent>
+            {products.length === 0 ? (
+              <p className="text-slate-600 text-sm">No products yet. Create your first product to get started!</p>
+            ) : (
+              <div className="space-y-4">
+                {products.map((product) => (
+                  <div key={product.id} className="flex items-center justify-between border-b pb-3 last:border-0">
+                    <div>
+                      <div className="font-medium">{product.name}</div>
+                      <div className="text-sm text-slate-600">{product.category}</div>
+                    </div>
+                    <Badge variant={product.is_active ? 'default' : 'secondary'}>
+                      {product.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Getting Started</CardTitle>
-            <CardDescription>Learn how to use the platform</CardDescription>
+            <CardTitle>Recent Forecasts</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2 text-sm">
-              <li className="flex items-start">
-                <span className="text-blue-600 mr-2">1.</span>
-                <span>Add your products with detailed descriptions</span>
-              </li>
-              <li className="flex items-start">
-                <span className="text-blue-600 mr-2">2.</span>
-                <span>Create forecasts to analyze market potential</span>
-              </li>
-              <li className="flex items-start">
-                <span className="text-blue-600 mr-2">3.</span>
-                <span>Review insights and implement strategies</span>
-              </li>
-            </ul>
+            {forecasts.length === 0 ? (
+              <p className="text-slate-600 text-sm">No forecasts yet. Create a forecast to see AI insights!</p>
+            ) : (
+              <div className="space-y-4">
+                {forecasts.map((forecast) => (
+                  <div key={forecast.id} className="flex items-center justify-between border-b pb-3 last:border-0">
+                    <div>
+                      <div className="font-medium">Forecast Analysis</div>
+                      <div className="text-sm text-slate-600">
+                        {forecast.status === 'completed' && forecast.confidence_level
+                          ? `Confidence: ${forecast.confidence_level}%`
+                          : 'Processing...'}
+                      </div>
+                    </div>
+                    <Badge
+                      variant={
+                        forecast.status === 'completed' ? 'default' :
+                        forecast.status === 'failed' ? 'destructive' : 'secondary'
+                      }
+                    >
+                      {forecast.status}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      <Card className="bg-blue-50 border-blue-200">
+        <CardContent className="pt-6">
+          <div className="flex items-start space-x-4">
+            <div className="bg-blue-100 rounded-full p-3">
+              <BarChart3 className="h-6 w-6 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-blue-900">Current Plan: {user?.subscription_tier?.toUpperCase()}</h3>
+              <p className="text-blue-800 text-sm mt-1">
+                You have {user?.forecast_credits_remaining || 0} forecast credits remaining this month.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
